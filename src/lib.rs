@@ -1,3 +1,5 @@
+mod data_format;
+
 use std::collections::HashMap;
 use std::env;
 use std::ffi::{CString, CStr};
@@ -13,49 +15,6 @@ use nix::unistd::Uid;
 #[cfg(windows)]
 use whoami;
 
-#[derive(Deserialize, Debug, Clone)]
-pub struct DataFormat {
-    pub LC_TIME: LC_TIME,
-    pub LC_NUMERIC: LC_NUMERIC,
-    pub LC_MONETARY: LC_MONETARY,
-    pub LC_COLLATE: LC_COLLATE,
-    pub PLURAL_RULES: String,
-}
-
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
-pub struct LC_TIME {
-    pub days: Vec<String>,
-    pub months: Vec<String>,
-    pub date_fmt: String,
-}
-
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
-pub struct LC_NUMERIC {
-    pub decimal_point: String,
-    pub thousands_sep: String,
-    pub grouping: Vec<u8>,
-}
-
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
-pub struct LC_MONETARY {
-    pub currency_symbol: String,
-    pub int_curr_symbol: String,
-    pub mon_decimal_point: String,
-    pub mon_thousands_sep: String,
-    pub positive_sign: String,
-    pub negative_sign: String,
-    pub frac_digits: u8,
-}
-
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
-pub struct LC_COLLATE {
-    pub sort_order: String,
-}
-
 #[derive(Deserialize, Debug, Serialize)]
 pub struct Settings {
     pub default_locale: String,
@@ -64,7 +23,7 @@ pub struct Settings {
 
 #[derive(Clone)]
 pub struct Locale {
-    pub data: DataFormat,
+    pub data: data_format::DataFormat,
     pub strings: HashMap<String, String>,
     pub name: String,
 }
@@ -72,7 +31,7 @@ pub struct Locale {
 impl Locale {
     fn load(path: &Path, name: &str) -> Self {
         let data_file = File::open(path.join("data_format.json")).expect("data_format.json not found");
-        let data: DataFormat = serde_json::from_reader(data_file).expect("Failed to parse data_format.json");
+        let data: data_format::DataFormat = serde_json::from_reader(data_file).expect("Failed to parse data_format.json");
 
         let toml_str = fs::read_to_string(path.join("locale.toml")).expect("locale.toml not found");
         let strings: HashMap<String, String> = toml::from_str(&toml_str).expect("Failed to parse locale.toml");
@@ -152,6 +111,11 @@ impl AnLocales {
     }
 
     pub fn new() -> Self {
+        // hook for panic
+        std::panic::set_hook(Box::new(|info| {
+            eprintln!("panic happened: {}", info);
+        }));
+
         // directory
         let (locales_path, temp_path, settings_file_path) = Self::default_paths();
 

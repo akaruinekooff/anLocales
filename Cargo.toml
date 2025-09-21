@@ -12,3 +12,13 @@ chrono = "0.4.42"
 serde_json = "1.0.145"
 toml = "0.9.7"
 nix = { version = "0.30.1", features = ["user"] }
+
+[profile.release]
+# flags for optimization [bools]
+lto = true
+debug = false
+# flags for optimization [strings]
+opt-level = "z"
+panic = "abort"
+# flag for codegen enchanments [int]
+codegen-units = 1
