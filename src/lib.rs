@@ -3,7 +3,7 @@ use std::ffi::{CString, CStr};
 use std::os::raw::c_char;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use chrono::NaiveDate;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -49,7 +49,7 @@ pub struct LC_COLLATE {
     pub sort_order: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Settings {
     pub default_locale: String,
     pub fallback_locale: String,
@@ -107,6 +107,7 @@ pub struct AnLocales {
 
 impl AnLocales {
     pub fn new() -> Self {
+        // directory
         let (locales_path, temp_path, settings_file_path) = if cfg!(windows) {
             (
                 PathBuf::from("C:\\ProgramData\\anlocales\\locales"),
@@ -120,9 +121,22 @@ impl AnLocales {
                 PathBuf::from("/usr/share/anlocales/settings.json"),
             )
         };
+
+        // init
+        fs::create_dir_all(&locales_path).expect("failed to create locales dir");
+        fs::create_dir_all(&temp_path).expect("failed to create temp dir");
+        if !settings_file_path.exists() {
+            let default_settings = Settings {
+                default_locale: "en_US".into(),
+                fallback_locale: "en_US".into(),
+            };
+            let file = File::create(&settings_file_path).unwrap();
+            serde_json::to_writer(file, &default_settings).unwrap();
+        }
+
+        // opening and parsing settings.json
         let settings_file = File::open(&settings_file_path).expect("settings.json not found");
         let settings: Settings = serde_json::from_reader(settings_file).expect("Failed to parse settings.json");
-
 
         Self { locales_path, temp_path, settings, cache: HashMap::new() }
     }
