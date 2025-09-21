@@ -1,10 +1,17 @@
 use std::collections::HashMap;
+use std::env;
 use std::ffi::{CString, CStr};
 use std::os::raw::c_char;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use chrono::NaiveDate;
+
+#[cfg(unix)]
+use nix::unistd::Uid;
+
+#[cfg(windows)]
+use whoami;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct DataFormat {
@@ -106,21 +113,47 @@ pub struct AnLocales {
 }
 
 impl AnLocales {
-    pub fn new() -> Self {
-        // directory
-        let (locales_path, temp_path, settings_file_path) = if cfg!(windows) {
-            (
+    fn default_paths() -> (PathBuf, PathBuf, PathBuf) {
+        let is_admin = {
+            #[cfg(unix)]
+            { Uid::effective().is_root() }
+
+            #[cfg(windows)]
+            { whoami::privilege_level() == whoami::PrivilegeLevel::Admin }
+        };
+
+        if is_admin {
+            #[cfg(unix)]
+            return (
+                PathBuf::from("/usr/share/anlocales/locales"),
+                PathBuf::from("/usr/share/anlocales/temp"),
+                PathBuf::from("/usr/share/anlocales/settings.json"),
+            );
+
+            #[cfg(windows)]
+            return (
                 PathBuf::from("C:\\ProgramData\\anlocales\\locales"),
                 PathBuf::from("C:\\ProgramData\\anlocales\\temp"),
                 PathBuf::from("C:\\ProgramData\\anlocales\\settings.json"),
             )
         } else {
+            #[cfg(unix)]
+            let base_dir = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+
+            #[cfg(windows)]
+            let base_dir = env::var("APPDATA").unwrap_or_else(|_| "C:\\Users\\Default\\AppData\\Roaming".into());
+
             (
-                PathBuf::from("/usr/share/anlocales/locales"),
-                PathBuf::from("/usr/share/anlocales/temp"),
-                PathBuf::from("/usr/share/anlocales/settings.json"),
+                PathBuf::from(format!("{}/anlocales/locales", base_dir)),
+                PathBuf::from(format!("{}/anlocales/temp", base_dir)),
+                PathBuf::from(format!("{}/anlocales/settings.json", base_dir)),
             )
-        };
+        }
+    }
+
+    pub fn new() -> Self {
+        // directory
+        let (locales_path, temp_path, settings_file_path) = Self::default_paths();
 
         // init
         fs::create_dir_all(&locales_path).expect("failed to create locales dir");
