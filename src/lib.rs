@@ -78,7 +78,7 @@ impl AnLocales {
             { Uid::effective().is_root() }
 
             #[cfg(windows)]
-            { whoami::privilege_level() == whoami::PrivilegeLevel::Admin }
+            { whoami::is_elevated() }
         };
 
         if is_admin {
