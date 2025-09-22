@@ -13,7 +13,7 @@ use chrono::NaiveDate;
 use nix::unistd::Uid;
 
 #[cfg(windows)]
-use whoami;
+use is_admin;
 
 #[derive(Deserialize, Debug, Serialize)]
 pub struct Settings {
@@ -78,7 +78,7 @@ impl AnLocales {
             { Uid::effective().is_root() }
 
             #[cfg(windows)]
-            { whoami::privilege_level() == whoami::PrivilegeLevel::Admin }
+            { is_admin::is_admin() }
         };
 
         if is_admin {
