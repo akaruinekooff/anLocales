@@ -25,7 +25,10 @@ jobs:
       - name: Check if version exists on crates.io
         id: check
         run: |
-          if curl -s https://crates.io/api/v1/crates/anLocales | jq -r ".crate.versions[].num" | grep -qx "$VERSION"; then
+          VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[0].version')
+          echo "version=$VERSION" >> $GITHUB_ENV
+          EXISTS=$(curl -s https://crates.io/api/v1/crates/anLocales | jq -r ".versions[]?.num" | grep -x "$VERSION" || true)
+          if [ -n "$EXISTS" ]; then
             echo "Version $VERSION already exists on crates.io"
             exit 78
           fi
