@@ -10,7 +10,7 @@ categories = ["internationalization"]
 # authors
 authors = ["AkaruiNeko <brightcat1950@gmail.com>"]
 # license
-license = "MPL-2"
+license = "MPL-2.0"
 # rust edition
 edition = "2024"
 
