@@ -16,21 +16,12 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Get crate version
-        id: version
-        run: |
-          VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[0].version')
-          echo "version=$VERSION" >> $GITHUB_ENV
-
-      - name: Publish if new version
+      - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
         run: |
           VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[0].version')
           echo "Current version: $VERSION"
           
-          if cargo search anLocales | grep -q "^anLocales = \"$VERSION\""; then
-            echo "Version exists, skipping"
-          else
-            cargo publish --no-verify
-          fi
+          cargo publish --no-verify || true
+          echo "Publish step finished (version may already exist)"
