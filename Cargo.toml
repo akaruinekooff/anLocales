@@ -1,6 +1,17 @@
 [package]
+# info
 name = "anLocales"
 version = "0.1.0"
+description = "library for translating your projects in rust."
+repository = "https://github.com/akaruinekooff/anLocales"
+# keywords
+keywords = ["translation", "i18n", "localization"]
+categories = ["internationalization"]
+# authors
+authors = ["AkaruiNeko <brightcat1950@gmail.com>"]
+# license
+license = "MPL-2"
+# rust edition
 edition = "2024"
 
 [lib]
