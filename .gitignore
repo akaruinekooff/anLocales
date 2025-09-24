@@ -1,3 +1,18 @@
-/target
-.idea
+# dir of build
+/target/
+
+# IDE and editors
+.idea/
+*.swp
+*.swo
+*.vscode/
+
+# dist
 /dist/
+
+# lock file
+Cargo.lock
+
+# OS-specific
+.DS_Store
+Thumbs.db
