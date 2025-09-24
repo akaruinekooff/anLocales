@@ -29,11 +29,8 @@ jobs:
           VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[0].version')
           echo "Current version: $VERSION"
           
-          EXISTS=$(curl -s https://crates.io/api/v1/crates/anLocales | jq -r ".versions[]?.num" | grep -x "$VERSION" || true)
-          
-          if [ "$EXISTS" = "" ]; then
-            echo "Version $VERSION not found, publishing..."
-            cargo publish --no-verify
+          if cargo search anLocales | grep -q "^anLocales = \"$VERSION\""; then
+            echo "Version exists, skipping"
           else
-            echo "Version $VERSION already exists on crates.io, skipping publish"
+            cargo publish --no-verify
           fi
