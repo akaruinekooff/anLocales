@@ -31,7 +31,7 @@ jobs:
           
           EXISTS=$(curl -s https://crates.io/api/v1/crates/anLocales | jq -r ".versions[]?.num" | grep -x "$VERSION" || true)
           
-          if [ -z "$EXISTS" ]; then
+          if [ "$EXISTS" = "" ]; then
             echo "Version $VERSION not found, publishing..."
             cargo publish --no-verify
           else
