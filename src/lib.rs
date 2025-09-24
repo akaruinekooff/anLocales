@@ -1,16 +1,14 @@
 mod data_format;
+mod utils;
 
-use std::collections::HashMap;
-use std::env;
-use std::ffi::{CString, CStr};
-use std::os::raw::c_char;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 use chrono::NaiveDate;
-
-#[cfg(unix)]
-use nix::unistd::Uid;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::ffi::{CStr, CString};
+use std::fs::{self, File};
+use std::os::raw::c_char;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[cfg(windows)]
 use is_admin;
@@ -21,26 +19,43 @@ pub struct Settings {
     pub fallback_locale: String,
 }
 
+
 #[derive(Clone)]
 pub struct Locale {
     pub data: data_format::DataFormat,
-    pub strings: HashMap<String, String>,
+    pub strings: HashMap<String, Vec<String>>,
+    pub plural_fn: Arc<dyn Fn(u32) -> usize + Send + Sync>,
     pub name: String,
 }
 
 impl Locale {
-    fn load(path: &Path, name: &str) -> Self {
+    pub fn load(path: &Path, name: &str) -> Self {
         let data_file = File::open(path.join("data_format.json")).expect("data_format.json not found");
         let data: data_format::DataFormat = serde_json::from_reader(data_file).expect("Failed to parse data_format.json");
 
         let toml_str = fs::read_to_string(path.join("locale.toml")).expect("locale.toml not found");
-        let strings: HashMap<String, String> = toml::from_str(&toml_str).expect("Failed to parse locale.toml");
+        let strings: HashMap<String, Vec<String>> = toml::from_str(&toml_str).expect("Failed to parse locale.toml");
 
-        Self { data, strings, name: name.to_string() }
+        let plural_rule = data.PLURAL_RULES.clone();
+        let plural_fn = Arc::new(move |n: u32| {
+            let expr = plural_rule.replace("n", &n.to_string());
+            meval::eval_str(&expr).unwrap_or(0.0) as usize
+        });
+
+        Self { data, strings, plural_fn, name: name.to_string() }
     }
 
     pub fn t<'a>(&'a self, key: &'a str) -> &'a str {
-        self.strings.get(key).map(|s| s.as_str()).unwrap_or(key)
+        self.strings.get(key).and_then(|v| v.get(0)).map(|s| s.as_str()).unwrap_or(key)
+    }
+
+    pub fn plural_word<'a>(&'a self, key: &'a str, n: u32) -> &'a str {
+        if let Some(forms) = self.strings.get(key) {
+            let idx = (self.plural_fn)(n);
+            &forms[std::cmp::min(idx, forms.len() - 1)]
+        } else {
+            key
+        }
     }
 
     pub fn format_date(&self, date: Option<NaiveDate>) -> String {
@@ -50,10 +65,6 @@ impl Locale {
     pub fn format_money(&self, amount: f64) -> String {
         let fmt = &self.data.LC_MONETARY;
         format!("{}{:.*}", fmt.currency_symbol, fmt.frac_digits as usize, amount)
-    }
-
-    pub fn plural(&self, n: u32) -> bool {
-        self.data.PLURAL_RULES != "n != 1" || n != 1
     }
 
     pub fn compare(&self, a: &str, b: &str) -> i32 {
@@ -72,44 +83,6 @@ pub struct AnLocales {
 }
 
 impl AnLocales {
-    fn default_paths() -> (PathBuf, PathBuf, PathBuf) {
-        let is_admin = {
-            #[cfg(unix)]
-            { Uid::effective().is_root() }
-
-            #[cfg(windows)]
-            { is_admin::is_admin() }
-        };
-
-        if is_admin {
-            #[cfg(unix)]
-            return (
-                PathBuf::from("/usr/share/anlocales/locales"),
-                PathBuf::from("/usr/share/anlocales/temp"),
-                PathBuf::from("/usr/share/anlocales/settings.json"),
-            );
-
-            #[cfg(windows)]
-            return (
-                PathBuf::from("C:\\ProgramData\\anlocales\\locales"),
-                PathBuf::from("C:\\ProgramData\\anlocales\\temp"),
-                PathBuf::from("C:\\ProgramData\\anlocales\\settings.json"),
-            )
-        } else {
-            #[cfg(unix)]
-            let base_dir = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-
-            #[cfg(windows)]
-            let base_dir = env::var("APPDATA").unwrap_or_else(|_| "C:\\Users\\Default\\AppData\\Roaming".into());
-
-            (
-                PathBuf::from(format!("{}/anlocales/locales", base_dir)),
-                PathBuf::from(format!("{}/anlocales/temp", base_dir)),
-                PathBuf::from(format!("{}/anlocales/settings.json", base_dir)),
-            )
-        }
-    }
-
     pub fn new() -> Self {
         // hook for panic
         std::panic::set_hook(Box::new(|info| {
@@ -117,19 +90,30 @@ impl AnLocales {
         }));
 
         // directory
-        let (locales_path, temp_path, settings_file_path) = Self::default_paths();
+        let (locales_path, temp_path, settings_file_path) = utils::default_paths();
 
         // init
         fs::create_dir_all(&locales_path).expect("failed to create locales dir");
         fs::create_dir_all(&temp_path).expect("failed to create temp dir");
-        if !settings_file_path.exists() {
-            let default_settings = Settings {
-                default_locale: "en_US".into(),
-                fallback_locale: "en_US".into(),
-            };
-            let file = File::create(&settings_file_path).unwrap();
-            serde_json::to_writer(file, &default_settings).unwrap();
-        }
+        utils::ensure_that_config_exists(settings_file_path.clone());
+
+        // opening and parsing settings.json
+        let settings_file = File::open(&settings_file_path).expect("settings.json not found");
+        let settings: Settings = serde_json::from_reader(settings_file).expect("Failed to parse settings.json");
+
+        Self { locales_path, temp_path, settings, cache: HashMap::new() }
+    }
+
+    pub fn new_with_paths(locales_path : PathBuf, temp_path : PathBuf, settings_file_path : PathBuf) -> Self {
+        // hook for panic
+        std::panic::set_hook(Box::new(|info| {
+            eprintln!("panic happened: {}", info);
+        }));
+
+        // init
+        fs::create_dir_all(&locales_path).expect("failed to create locales dir");
+        fs::create_dir_all(&temp_path).expect("failed to create temp dir");
+        utils::ensure_that_config_exists(settings_file_path.clone());
 
         // opening and parsing settings.json
         let settings_file = File::open(&settings_file_path).expect("settings.json not found");
@@ -158,6 +142,28 @@ impl AnLocales {
 }
 
 // ================= C API =================
+#[unsafe(no_mangle)]
+pub extern "C" fn anlocales_new_with_paths(
+    locales_path: *const c_char,
+    temp_path: *const c_char,
+    settings_file_path: *const c_char,
+) -> *mut AnLocales {
+    if locales_path.is_null() || temp_path.is_null() || settings_file_path.is_null() {
+        return std::ptr::null_mut();
+    }
+
+    let locales_path = unsafe { CStr::from_ptr(locales_path).to_string_lossy().into_owned() };
+    let temp_path = unsafe { CStr::from_ptr(temp_path).to_string_lossy().into_owned() };
+    let settings_file_path = unsafe { CStr::from_ptr(settings_file_path).to_string_lossy().into_owned() };
+
+    let al = AnLocales::new_with_paths(
+        PathBuf::from(locales_path),
+        PathBuf::from(temp_path),
+        PathBuf::from(settings_file_path),
+    );
+
+    Box::into_raw(Box::new(al))
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn anlocales_new() -> *mut AnLocales {
@@ -223,10 +229,12 @@ pub extern "C" fn locale_compare(ptr: *mut Locale, a: *const c_char, b: *const c
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn locale_plural(ptr: *mut Locale, n: u32) -> bool {
-    if ptr.is_null() { return false; }
+pub extern "C" fn locale_plural_word(ptr: *mut Locale, key: *const c_char, n: u32) -> *const c_char {
+    if ptr.is_null() || key.is_null() { return std::ptr::null(); }
     let locale = unsafe { &*ptr };
-    locale.plural(n)
+    let key_str = unsafe { CStr::from_ptr(key) }.to_str().unwrap();
+    let word = locale.plural_word(key_str, n);
+    CString::new(word).unwrap().into_raw()
 }
 
 #[unsafe(no_mangle)]
