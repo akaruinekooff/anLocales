@@ -1,0 +1,36 @@
+name: Publish Rust crate
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Get crate version
+        id: version
+        run: |
+          VERSION=$(cargo metadata --format-version=1 | jq -r '.packages[0].version')
+          echo "version=$VERSION" >> $GITHUB_ENV
+
+      - name: Check if version exists on crates.io
+        id: check
+        run: |
+          if curl -s https://crates.io/api/v1/crates/anLocales | jq -r ".crate.versions[].num" | grep -qx "$VERSION"; then
+            echo "Version $VERSION already exists on crates.io"
+            exit 78
+          fi
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
+        run: cargo publish --no-verify
