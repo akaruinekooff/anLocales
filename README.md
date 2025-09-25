@@ -149,6 +149,40 @@ cargo build --release --target x86_64-pc-windows-gnu
 # you can run "make" but if its not working use this method
 ```
 
+## Installing anLocales Library 
+
+To enable localization in some programs using this library, you need the anLocales library. Follow the instructions for your platform:
+
+### 1. Download or build the library
+
+I think you already build the library, but if not, you can download from artifacts, or follow the instructions from [building guide](#-building)
+
+* After building, you will have one of the compiled libraries (depending on the platform):
+  * Linux: `libanlocales.so`
+  * macOS: `libanlocales.dylib`
+  * Windows: `anlocales.dll`
+
+### 2. Place the library
+
+* Move or copy the library to a folder in your system’s library path.
+  Examples:
+
+    * Linux/macOS:
+
+      ```bash
+      cp target/release/libanlocales.so /usr/local/lib/
+      ```
+    * Windows:
+
+        * Copy `anlocales.dll` to a folder in `%PATH%`.
+
+> 💡 Tip: On Linux/macOS, if the library is not found, you may need to update the library path:
+>
+> ```bash
+> export LD_LIBRARY_PATH=/path/to/library:$LD_LIBRARY_PATH  # Linux
+> export DYLD_LIBRARY_PATH=/path/to/library:$DYLD_LIBRARY_PATH  # macOS
+> ```
+
 ### Linking in C
 
 ```bash
