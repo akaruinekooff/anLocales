@@ -158,9 +158,9 @@ To enable localization in some programs using this library, you need the anLocal
 I think you already build the library, but if not, you can download from artifacts, or follow the instructions from [building guide](#-building)
 
 * After building, you will have one of the compiled libraries (depending on the platform):
-  * Linux: `libanlocales.so`
-  * macOS: `libanlocales.dylib`
-  * Windows: `anlocales.dll`
+  * Linux: `libanLocales.so`
+  * macOS: `libanLocales.dylib`
+  * Windows: `anLocales.dll`
 
 ### 2. Place the library
 
@@ -170,11 +170,11 @@ I think you already build the library, but if not, you can download from artifac
     * Linux/macOS:
 
       ```bash
-      cp target/release/libanlocales.so /usr/local/lib/
+      cp target/release/libanLocales.so /usr/local/lib/
       ```
     * Windows:
 
-        * Copy `anlocales.dll` to a folder in `%PATH%`.
+        * Copy `anLocales.dll` to a folder in `%PATH%`.
 
 > 💡 Tip: On Linux/macOS, if the library is not found, you may need to update the library path:
 >
