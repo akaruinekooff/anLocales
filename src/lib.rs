@@ -243,8 +243,8 @@ pub extern "C" fn locale_format_money(ptr: *mut Locale, amount: f64) -> *const c
 #[unsafe(no_mangle)]
 pub extern "C" fn locale_compare(ptr: *mut Locale, a: *const c_char, b: *const c_char) -> i32 {
     if ptr.is_null() || a.is_null() || b.is_null() { return 0; }
-    let s1 = unsafe { CStr::from_ptr(a).to_str().unwrap() };
-    let s2 = unsafe { CStr::from_ptr(b).to_str().unwrap() };
+    let s1 = unsafe { CStr::from_ptr(a).to_str().unwrap_or("") };
+    let s2 = unsafe { CStr::from_ptr(b).to_str().unwrap_or("") };
     let locale = unsafe { &*ptr };
     locale.compare(s1, s2)
 }
