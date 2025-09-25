@@ -1,6 +1,6 @@
-use std::env;
+use std::{env, fs};
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // utils
 
@@ -33,35 +33,52 @@ pub fn ensure_that_config_exists(settings_file_path: PathBuf) {
         serde_json::to_writer(file, &default_settings).unwrap();
     }
 }
+fn can_write_dir(path: &Path) -> bool {
+    if !path.exists() {
+        return false;
+    }
 
-pub(crate) fn default_paths() -> (PathBuf, PathBuf, PathBuf) {
-    let is_admin = is_root();
+    let test_file = path.join(".anLocales");
+    match File::create(&test_file) {
+        Ok(_) => {
+            let _ = fs::remove_file(test_file);
+            true
+        }
+        Err(_) => false,
+    }
+}
+fn can_write_file(path: &Path) -> bool {
+    match fs::OpenOptions::new().write(true).open(path) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
 
-    if is_admin {
-        #[cfg(unix)]
-        return (
-            PathBuf::from("/usr/share/anlocales/locales"),
-            PathBuf::from("/usr/share/anlocales/temp"),
-            PathBuf::from("/usr/share/anlocales/settings.json"),
-        );
+pub fn default_paths() -> (PathBuf, PathBuf, PathBuf) {
+    #[cfg(unix)]
+    let system_base = PathBuf::from("/usr/share/anlocales");
+    #[cfg(windows)]
+    let system_base = PathBuf::from("C:\\ProgramData\\anlocales");
 
-        #[cfg(windows)]
-        return (
-            PathBuf::from("C:\\ProgramData\\anlocales\\locales"),
-            PathBuf::from("C:\\ProgramData\\anlocales\\temp"),
-            PathBuf::from("C:\\ProgramData\\anlocales\\settings.json"),
+    let use_system = is_root() || can_write_dir(&system_base);
+
+    if use_system {
+        (
+            system_base.join("locales"),
+            system_base.join("temp"),
+            system_base.join("settings.json"),
         )
     } else {
         #[cfg(unix)]
-        let base_dir = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-
+        let home_base = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
         #[cfg(windows)]
-        let base_dir = env::var("APPDATA").unwrap_or_else(|_| "C:\\Users\\Default\\AppData\\Roaming".into());
+        let home_base = env::var("APPDATA").unwrap_or_else(|_| "C:\\Users\\Default\\AppData\\Roaming".into());
 
+        let user_base = PathBuf::from(home_base).join("anlocales");
         (
-            PathBuf::from(format!("{}/anlocales/locales", base_dir)),
-            PathBuf::from(format!("{}/anlocales/temp", base_dir)),
-            PathBuf::from(format!("{}/anlocales/settings.json", base_dir)),
+            user_base.join("locales"),
+            user_base.join("temp"),
+            user_base.join("settings.json"),
         )
     }
 }
