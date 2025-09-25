@@ -23,15 +23,17 @@ fn is_root() -> bool {
 }
 
 // config or paths
-pub fn ensure_that_config_exists(settings_file_path : PathBuf) {
-    assert!(settings_file_path.exists());
-    let default_settings = Settings {
-        default_locale: "en_US".into(),
-        fallback_locale: "en_US".into(),
-    };
-    let file = File::create(&settings_file_path).unwrap();
-    serde_json::to_writer(file, &default_settings).unwrap();
+pub fn ensure_that_config_exists(settings_file_path: PathBuf) {
+    if !settings_file_path.exists() {
+        let default_settings = Settings {
+            default_locale: "en_US".into(),
+            fallback_locale: "en_US".into(),
+        };
+        let file = File::create(&settings_file_path).unwrap();
+        serde_json::to_writer(file, &default_settings).unwrap();
+    }
 }
+
 pub(crate) fn default_paths() -> (PathBuf, PathBuf, PathBuf) {
     let is_admin = is_root();
 
