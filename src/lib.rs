@@ -177,6 +177,27 @@ pub extern "C" fn anlocales_free(ptr: *mut AnLocales) {
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn anlocales_default_locale(ptr: *mut AnLocales) -> *mut Locale {
+    unsafe {
+        if ptr.is_null() { return std::ptr::null_mut(); }
+        let al = &mut *ptr;
+        let locale = al.default_locale();
+        Box::into_raw(Box::new(locale.clone()))
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn anlocales_fallback_locale(ptr: *mut AnLocales) -> *mut Locale {
+    unsafe {
+        if ptr.is_null() { return std::ptr::null_mut(); }
+        let al = &mut *ptr;
+        let locale = al.fallback_locale();
+        Box::into_raw(Box::new(locale.clone()))
+    }
+}
+
+
+#[unsafe(no_mangle)]
 pub extern "C" fn locale_load(ptr: *mut AnLocales, name: *const c_char) -> *mut Locale {
     if ptr.is_null() || name.is_null() { return std::ptr::null_mut(); }
     let cstr = unsafe { CStr::from_ptr(name) };
