@@ -71,9 +71,9 @@ C:\ProgramData\anlocales\
 **Example `locale.toml`:**
 
 ```toml
-settings = "Settings"
-exit = "Exit"
-hello = "Hello"
+settings = ["Settings"]
+exit = ["Exit"]
+hello = ["Hello"]
 ```
 
 ---
