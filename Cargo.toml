@@ -1,7 +1,7 @@
 [package]
 # info
 name = "anLocales"
-version = "0.1.1"
+version = "0.1.2"
 description = "library for translating your projects in rust."
 repository = "https://github.com/akaruinekooff/anLocales"
 # keywords
