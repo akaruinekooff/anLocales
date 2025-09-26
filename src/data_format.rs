@@ -13,24 +13,21 @@ pub struct DataFormat {
     pub PLURAL_RULES: String,
 }
 
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct LC_TIME {
     pub days: Vec<String>,
     pub months: Vec<String>,
     pub date_fmt: String,
 }
 
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct LC_NUMERIC {
     pub decimal_point: String,
     pub thousands_sep: String,
     pub grouping: Vec<u8>,
 }
 
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct LC_MONETARY {
     pub currency_symbol: String,
     pub int_curr_symbol: String,
@@ -39,10 +36,15 @@ pub struct LC_MONETARY {
     pub positive_sign: String,
     pub negative_sign: String,
     pub frac_digits: u8,
+    pub p_cs_precedes: bool,
+    pub n_cs_precedes: bool,
+    pub p_sep_by_space: bool,
+    pub n_sep_by_space: bool,
+    pub p_sign_posn: u8,
+    pub n_sign_posn: u8,
 }
 
-#[derive(Deserialize, Debug)]
-#[derive(Clone)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct LC_COLLATE {
     pub sort_order: String,
 }

@@ -9,9 +9,9 @@ use std::fs::{self, File};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
-#[cfg(windows)]
-use is_admin;
+use std::cmp::Ordering;
+use unicode_normalization::UnicodeNormalization;
+use unicode_general_category::{get_general_category, GeneralCategory};
 
 #[derive(Deserialize, Debug, Serialize)]
 pub struct Settings {
@@ -64,13 +64,179 @@ impl Locale {
 
     pub fn format_money(&self, amount: f64) -> String {
         let fmt = &self.data.LC_MONETARY;
-        format!("{}{:.*}", fmt.currency_symbol, fmt.frac_digits as usize, amount)
+        let numeric = &self.data.LC_NUMERIC;
+
+        let factor = 10f64.powi(fmt.frac_digits as i32);
+        let rounded = (amount * factor).round() / factor;
+
+        let (sign_str, is_negative) = if rounded < 0.0 {
+            (fmt.negative_sign.clone(), true)
+        } else {
+            (fmt.positive_sign.clone(), false)
+        };
+
+        let int_part = rounded.abs().trunc() as i64;
+        let frac_part = rounded.abs() - (int_part as f64);
+
+        let frac_str = format!("{:0width$}", (frac_part * 10f64.powi(fmt.frac_digits as i32)).round() as u64, width = fmt.frac_digits as usize);
+
+        let mut int_str = String::new();
+        let mut grouping = numeric.grouping.iter().copied();
+        let g = grouping.next();
+
+        if int_part == 0 {
+            int_str.push('0');
+        } else {
+            let mut digits: Vec<char> = int_part.to_string().chars().rev().collect();
+            let mut pos = 0;
+
+            while let Some(d) = digits.pop() {
+                int_str.push(d);
+                pos += 1;
+                if let Some(g_size) = g {
+                    if pos % g_size as usize == 0 && !digits.is_empty() {
+                        int_str.push_str(&numeric.thousands_sep);
+                    }
+                }
+            }
+        }
+
+        let amount_str = format!("{}{}{}", int_str, numeric.decimal_point, frac_str);
+
+        let (cs_precedes, sep_by_space, sign_posn) = if is_negative {
+            (fmt.n_cs_precedes, fmt.n_sep_by_space, fmt.n_sign_posn)
+        } else {
+            (fmt.p_cs_precedes, fmt.p_sep_by_space, fmt.p_sign_posn)
+        };
+        let space = if sep_by_space { " " } else { "" };
+
+        let mut result = match cs_precedes {
+            true => format!("{}{}{}", fmt.currency_symbol, space, amount_str),
+            false => format!("{}{}{}", amount_str, space, fmt.currency_symbol),
+        };
+
+        result = match sign_posn {
+            0 => format!("({})", result),
+            1 => format!("{}{}", sign_str, result),
+            2 => format!("{}{}", result, sign_str),
+            3 => {
+                if cs_precedes { format!("{}{}", sign_str, result) } else { format!("{}{}", sign_str, result) }
+            }
+            4 => {
+                if cs_precedes { format!("{}{}", result, sign_str) } else { format!("{}{}", result, sign_str) }
+            }
+            _ => result,
+        };
+
+        result
+    }
+
+    pub fn format_numeric(&self, number: f64) -> String {
+        let numeric = &self.data.LC_NUMERIC;
+
+        let int_part = number.trunc() as i64;
+        let frac_part = number.fract();
+        let frac_part_str = frac_part.to_string();
+
+        let mut frac_str = String::new();
+        if frac_part != 0.0 {
+            let frac_digits = frac_part_str.split('.').nth(1).unwrap_or("0");
+            frac_str = format!("{}{}", numeric.decimal_point, frac_digits);
+        }
+
+        let mut int_str = String::new();
+        let mut digits: Vec<char> = int_part.abs().to_string().chars().rev().collect();
+        let mut grouping_iter = numeric.grouping.iter().copied();
+        let mut group_size = grouping_iter.next().unwrap_or(3);
+        let mut pos = 0;
+
+        #[allow(unused_variables)]
+        let mut group_index = 0;
+
+        while let Some(d) = digits.pop() {
+            int_str.push(d);
+            pos += 1;
+
+            if pos % group_size as usize == 0 && !digits.is_empty() {
+                int_str.push_str(&numeric.thousands_sep);
+                group_index += 1;
+                group_size = grouping_iter.next().unwrap_or(group_size);
+            }
+        }
+
+        if number < 0.0 {
+            int_str = format!("-{}", int_str);
+        }
+
+        format!("{}{}", int_str, frac_str)
     }
 
     pub fn compare(&self, a: &str, b: &str) -> i32 {
-        match self.data.LC_COLLATE.sort_order.as_str() {
-            "unicode" => a.cmp(b) as i32,
-            _ => a.cmp(b) as i32,
+        let ordering: Ordering = match self.data.LC_COLLATE.sort_order.as_str() {
+            "unicode" => a.cmp(b),
+            "ascii" => a.bytes().cmp(b.bytes()),
+            "unicode_ci" => a.to_lowercase().cmp(&b.to_lowercase()),
+            "ascii_ci" => a.to_ascii_lowercase().cmp(&b.to_ascii_lowercase()),
+
+            "unicode_base" => {
+                let a_base: String = a.nfd()
+                    .filter(|c| get_general_category(*c) != GeneralCategory::NonspacingMark)
+                    .collect();
+                let b_base: String = b.nfd()
+                    .filter(|c| get_general_category(*c) != GeneralCategory::NonspacingMark)
+                    .collect();
+                a_base.cmp(&b_base)
+            },
+
+            "unicode_base_ci" => {
+                let a_base: String = a.nfd()
+                    .filter(|c| get_general_category(*c) != GeneralCategory::NonspacingMark)
+                    .collect::<String>()
+                    .to_lowercase();
+                let b_base: String = b.nfd()
+                    .filter(|c| get_general_category(*c) != GeneralCategory::NonspacingMark)
+                    .collect::<String>()
+                    .to_lowercase();
+                a_base.cmp(&b_base)
+            },
+
+            "unicode_no_space" => {
+                let a_clean: String = a.chars().filter(|c| !c.is_whitespace()).collect();
+                let b_clean: String = b.chars().filter(|c| !c.is_whitespace()).collect();
+                a_clean.cmp(&b_clean)
+            },
+
+            "unicode_no_punct" => {
+                let a_clean: String = a.chars().filter(|c| !c.is_ascii_punctuation()).collect();
+                let b_clean: String = b.chars().filter(|c| !c.is_ascii_punctuation()).collect();
+                a_clean.cmp(&b_clean)
+            },
+
+            "unicode_ci_no_space" => {
+                let a_clean: String = a.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
+                let b_clean: String = b.to_lowercase().chars().filter(|c| !c.is_whitespace()).collect();
+                a_clean.cmp(&b_clean)
+            },
+
+            "unicode_ci_no_space_base" => {
+                let a_clean: String = a.nfd()
+                    .filter(|c| get_general_category(*c) != GeneralCategory::NonspacingMark && !c.is_whitespace())
+                    .collect::<String>()
+                    .to_lowercase();
+                let b_clean: String = b.nfd()
+                    .filter(|c| get_general_category(*c) != GeneralCategory::NonspacingMark && !c.is_whitespace())
+                    .collect::<String>()
+                    .to_lowercase();
+                a_clean.cmp(&b_clean)
+            },
+
+            _ => a.cmp(b),
+        };
+
+        match ordering {
+            Ordering::Less => -1,
+            Ordering::Equal => 0,
+            Ordering::Greater => 1,
         }
     }
 }
@@ -83,14 +249,11 @@ pub struct AnLocales {
 }
 
 impl AnLocales {
-    pub fn new() -> Self {
+    fn _new(locales_path : PathBuf, temp_path : PathBuf, settings_file_path : PathBuf) -> Self {
         // hook for panic
         std::panic::set_hook(Box::new(|info| {
             eprintln!("panic happened: {}", info);
         }));
-
-        // directory
-        let (locales_path, temp_path, settings_file_path) = utils::default_paths();
 
         // init
         fs::create_dir_all(&locales_path).expect("failed to create locales dir");
@@ -104,22 +267,14 @@ impl AnLocales {
         Self { locales_path, temp_path, settings, cache: HashMap::new() }
     }
 
+    pub fn new() -> Self {
+        // directory
+        let (locales_path, temp_path, settings_file_path) = utils::default_paths();
+        Self::_new(locales_path, temp_path, settings_file_path)
+    }
+
     pub fn new_with_paths(locales_path : PathBuf, temp_path : PathBuf, settings_file_path : PathBuf) -> Self {
-        // hook for panic
-        std::panic::set_hook(Box::new(|info| {
-            eprintln!("panic happened: {}", info);
-        }));
-
-        // init
-        fs::create_dir_all(&locales_path).expect("failed to create locales dir");
-        fs::create_dir_all(&temp_path).expect("failed to create temp dir");
-        utils::ensure_that_config_exists(settings_file_path.clone());
-
-        // opening and parsing settings.json
-        let settings_file = File::open(&settings_file_path).expect("settings.json not found");
-        let settings: Settings = serde_json::from_reader(settings_file).expect("Failed to parse settings.json");
-
-        Self { locales_path, temp_path, settings, cache: HashMap::new() }
+        Self::_new(locales_path, temp_path, settings_file_path)
     }
 
     pub fn load_locale(&mut self, name: &str) -> &Locale {
@@ -237,6 +392,14 @@ pub extern "C" fn locale_format_money(ptr: *mut Locale, amount: f64) -> *const c
     if ptr.is_null() { return std::ptr::null(); }
     let locale = unsafe { &*ptr };
     let s = locale.format_money(amount);
+    CString::new(s).unwrap().into_raw()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn locale_format_numeric(ptr: *mut Locale, number: f64) -> *const c_char {
+    if ptr.is_null() { return std::ptr::null(); }
+    let locale = unsafe { &*ptr };
+    let s = locale.format_numeric(number);
     CString::new(s).unwrap().into_raw()
 }
 

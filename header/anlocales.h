@@ -43,6 +43,9 @@ const char* locale_format_date(Locale* loc, int year, unsigned int month, unsign
 // money formatting
 const char* locale_format_money(Locale* loc, double amount);
 
+// numeric formatting
+const char* locale_format_numeric(Locale* loc, double number);
+
 // string comparison (collation)
 int locale_compare(Locale* loc, const char* a, const char* b);
 

@@ -25,6 +25,8 @@ toml = "0.9.7"
 nix = { version = "0.30.1", features = ["user"] }
 is-admin = "0.1.4"
 meval = "0.2.0"
+unicode-normalization = "0.1.24"
+unicode-general-category = "1.1.0"
 
 [profile.release]
 # flags for optimization [bools]

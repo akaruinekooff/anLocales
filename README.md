@@ -59,7 +59,13 @@ C:\ProgramData\anlocales\
     "mon_thousands_sep": ",",
     "positive_sign": "",
     "negative_sign": "-",
-    "frac_digits": 2
+    "frac_digits": 2,
+    "p_cs_precedes": true,
+    "n_cs_precedes": true,
+    "p_sep_by_space": false,
+    "n_sep_by_space": false,
+    "p_sign_posn": 1,
+    "n_sign_posn": 1
   },
   "LC_COLLATE": {
     "sort_order": "unicode"
